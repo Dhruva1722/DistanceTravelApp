@@ -21,12 +21,12 @@ class LocationProvider(private val activity: AppCompatActivity) {
   private val client by lazy { LocationServices.getFusedLocationProviderClient(activity) }
 
   private val locations = mutableListOf<LatLng>()
+
   private var distance = 0
 
   private val SMOOTHING_WINDOW_SIZE = 126
 
   private val smoothedLocations = mutableListOf<LatLng>()
-
 
   val liveLocations = MutableLiveData<List<LatLng>>()
   val liveDistance = MutableLiveData<Int>()
@@ -37,12 +37,9 @@ class LocationProvider(private val activity: AppCompatActivity) {
       val currentLocation = result.lastLocation
       val latLng = LatLng(currentLocation.latitude, currentLocation.longitude)
 
-      Log.d("--------------", "onLocationResult: LatLon ${latLng}")
       val lastLocation = locations.lastOrNull()
-
-
+      val minDistanceThreshold = 5.0 // Adjust this threshold as needed
       if (lastLocation != null) {
-        // Calculate the distance between the current location and the las`t location
         val distanceBetweenLocations = calculateDistance(
           lastLocation.latitude, lastLocation.longitude,
           latLng.latitude, latLng.longitude
@@ -51,17 +48,19 @@ class LocationProvider(private val activity: AppCompatActivity) {
         // Update the distance and LiveData
         distance += distanceBetweenLocations.roundToInt()
         liveDistance.value = distance
-        Log.d("--------------", "onLocationResult: Distance traveled: $distanceBetweenLocations")
       }
 
+//      Log.d("--------------", "onLocationResult: LatLon ${latLng}")
+//
+//      if (lastLocation != null) {
+//        distance += SphericalUtil.computeDistanceBetween(lastLocation, latLng).roundToInt()
+//        liveDistance.value = distance
+//      }
       val locationInfo ="latitude and longitude : $latLng, Distance : $distance"
+      Log.d("--------------", "onLocationResult:  ${locationInfo}")
       saveLocationToFile(locationInfo)
-      smoothedLocations.add(latLng)
 
-      // Keep the size of smoothedLocations within a certain limit (e.g., 5 data points)
-      if (smoothedLocations.size > SMOOTHING_WINDOW_SIZE) {
-        smoothedLocations.removeAt(0)
-      }
+      smoothedLocations.add(latLng)
 
       // Calculate the smoothed latitude and longitude
       val smoothedLatLng = calculateSmoothedLatLng(smoothedLocations)
@@ -71,23 +70,24 @@ class LocationProvider(private val activity: AppCompatActivity) {
       liveLocations.value = locations
     }
   }
-
-
   private fun calculateSmoothedLatLng(locations: List<LatLng>): LatLng {
+    val windowSize = SMOOTHING_WINDOW_SIZE
+    if (locations.size < windowSize) {
+      // If not enough data points, return the last location
+      return locations.last()
+    }
     var sumLat = 0.0
     var sumLng = 0.0
 
-    for (location in locations) {
-      sumLat += location.latitude
-      sumLng += location.longitude
+    for (i in locations.size - windowSize until locations.size) {
+      sumLat += locations[i].latitude
+      sumLng += locations[i].longitude
     }
-
-    val smoothedLat = sumLat / locations.size
-    val smoothedLng = sumLng / locations.size
+    val smoothedLat = sumLat / windowSize
+    val smoothedLng = sumLng / windowSize
 
     return LatLng(smoothedLat, smoothedLng)
   }
-
   private fun saveLocationToFile(locationInfo: String) {
     try {
       val fileName = "location_data.txt"
@@ -107,7 +107,6 @@ class LocationProvider(private val activity: AppCompatActivity) {
       liveLocation.value = latLng
     }
   }
-
   fun trackUser() {
     val locationRequest = LocationRequest.create()
     locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
@@ -121,7 +120,6 @@ class LocationProvider(private val activity: AppCompatActivity) {
     distance = 0
   }
 }
-
 
 fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
   val R = 6371 // Earth's radius in kilometers

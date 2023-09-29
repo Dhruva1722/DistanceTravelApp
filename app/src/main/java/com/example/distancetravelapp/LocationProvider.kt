@@ -24,7 +24,8 @@ class LocationProvider(private val activity: AppCompatActivity) {
 
   private var distance = 0
 
-  private val SMOOTHING_WINDOW_SIZE = 126
+  private val DISTANCE_THRESHOLD_METERS = 10 // Increase the threshold
+  private val SMOOTHING_WINDOW_SIZE = 200
 
   private val smoothedLocations = mutableListOf<LatLng>()
 
@@ -38,24 +39,19 @@ class LocationProvider(private val activity: AppCompatActivity) {
       val latLng = LatLng(currentLocation.latitude, currentLocation.longitude)
 
       val lastLocation = locations.lastOrNull()
-      val minDistanceThreshold = 5.0 // Adjust this threshold as needed
+
+      Log.d("--------------", "onLocationResult: LatLon ${latLng}")
+
       if (lastLocation != null) {
-        val distanceBetweenLocations = calculateDistance(
-          lastLocation.latitude, lastLocation.longitude,
-          latLng.latitude, latLng.longitude
-        )
+        val calculatedDistance =
+          SphericalUtil.computeDistanceBetween(lastLocation, latLng).roundToInt()
 
-        // Update the distance and LiveData
-        distance += distanceBetweenLocations.roundToInt()
-        liveDistance.value = distance
+        if (calculatedDistance >= DISTANCE_THRESHOLD_METERS) {
+          distance += calculatedDistance
+          liveDistance.value = distance
+
+        }
       }
-
-//      Log.d("--------------", "onLocationResult: LatLon ${latLng}")
-//
-//      if (lastLocation != null) {
-//        distance += SphericalUtil.computeDistanceBetween(lastLocation, latLng).roundToInt()
-//        liveDistance.value = distance
-//      }
       val locationInfo ="latitude and longitude : $latLng, Distance : $distance"
       Log.d("--------------", "onLocationResult:  ${locationInfo}")
       saveLocationToFile(locationInfo)
@@ -73,7 +69,6 @@ class LocationProvider(private val activity: AppCompatActivity) {
   private fun calculateSmoothedLatLng(locations: List<LatLng>): LatLng {
     val windowSize = SMOOTHING_WINDOW_SIZE
     if (locations.size < windowSize) {
-      // If not enough data points, return the last location
       return locations.last()
     }
     var sumLat = 0.0
@@ -121,18 +116,29 @@ class LocationProvider(private val activity: AppCompatActivity) {
   }
 }
 
-fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-  val R = 6371 // Earth's radius in kilometers
-
-  val dLat = deg2rad(lat2 - lat1)
-  val dLon = deg2rad(lon2 - lon1)
-  val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-          Math.sin(dLon / 2) * Math.sin(dLon / 2)
-  val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  val d = R * c // Distance in km
-  return d
-}
-private fun deg2rad(deg: Double): Double {
-  return deg * (Math.PI / 180)
-}
+//fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+//  val R = 6371
+//
+//  val dLat = deg2rad(lat2 - lat1)
+//  val dLon = deg2rad(lon2 - lon1)
+//  val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+//          Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+//          Math.sin(dLon / 2) * Math.sin(dLon / 2)
+//  val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+//  val d = R * c // Distance in km
+//  return d
+//}
+//private fun deg2rad(deg: Double): Double {
+//  return deg * (Math.PI / 180)
+//}
+//val minDistanceThreshold = 5.0 // Adjust this threshold as needed
+//if (lastLocation != null) {
+//  val distanceBetweenLocations = calculateDistance(
+//    lastLocation.latitude, lastLocation.longitude,
+//    latLng.latitude, latLng.longitude
+//  )
+//
+//  // Update the distance and LiveData
+//  distance += distanceBetweenLocations.roundToInt()
+//  liveDistance.value = distance
+//}

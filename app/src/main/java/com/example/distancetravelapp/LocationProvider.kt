@@ -2,23 +2,30 @@ package com.example.distancetravelapp
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.MutableLiveData
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.LatLng
+import com.google.firebase.database.FirebaseDatabase
 import com.google.maps.android.SphericalUtil
 import java.io.OutputStreamWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @SuppressLint("MissingPermission")
-class LocationProvider(private val activity: AppCompatActivity) {
+class LocationProvider(private val context: Context) {
 
-  private val client by lazy { LocationServices.getFusedLocationProviderClient(activity) }
+  private val client by lazy { LocationServices.getFusedLocationProviderClient(context) }
 
   private val locations = mutableListOf<LatLng>()
 
@@ -27,11 +34,20 @@ class LocationProvider(private val activity: AppCompatActivity) {
   private val DISTANCE_THRESHOLD_METERS = 10 // Increase the threshold
   private val SMOOTHING_WINDOW_SIZE = 200
 
+  private val WAKELOCK_TAG_PREFIX = "com.example.distancetravelapp:MyAppWakeLock:"
+  private var wakeLock: PowerManager.WakeLock? = null
+
   private val smoothedLocations = mutableListOf<LatLng>()
 
   val liveLocations = MutableLiveData<List<LatLng>>()
   val liveDistance = MutableLiveData<Int>()
   val liveLocation = MutableLiveData<LatLng>()
+
+  val currentTimeStamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
+
+  val database = FirebaseDatabase.getInstance()
+  val locationsReference = database.getReference("locations")
 
   private val locationCallback = object : LocationCallback() {
     override fun onLocationResult(result: LocationResult) {
@@ -39,6 +55,7 @@ class LocationProvider(private val activity: AppCompatActivity) {
       val latLng = LatLng(currentLocation.latitude, currentLocation.longitude)
 
       val lastLocation = locations.lastOrNull()
+
 
       Log.d("--------------", "onLocationResult: LatLon ${latLng}")
 
@@ -49,10 +66,9 @@ class LocationProvider(private val activity: AppCompatActivity) {
         if (calculatedDistance >= DISTANCE_THRESHOLD_METERS) {
           distance += calculatedDistance
           liveDistance.value = distance
-
         }
       }
-      val locationInfo ="latitude and longitude : $latLng, Distance : $distance"
+      val locationInfo ="latitude and longitude : $latLng, Distance : $distance  ----- Time : $currentTimeStamp"
       Log.d("--------------", "onLocationResult:  ${locationInfo}")
       saveLocationToFile(locationInfo)
 
@@ -64,6 +80,30 @@ class LocationProvider(private val activity: AppCompatActivity) {
       locations.add(smoothedLatLng)
 //      locations.add(latLng)
       liveLocations.value = locations
+
+
+      val dateFormat = SimpleDateFormat("yyyy-MM-dd  ", Locale.getDefault())
+      val date = dateFormat.format(Date())
+
+      val locationData = mapOf(
+        "latitude" to latLng.latitude,
+        "longitude" to latLng.longitude,
+        "distance" to distance,
+        "time" to currentTimeStamp
+      )
+
+      locationsReference
+        .child(date)
+        .push()
+        .setValue(locationData)
+        .addOnSuccessListener {
+          Log.d("---------", "Location data added for date: $date")
+        }
+        .addOnFailureListener { e ->
+          Log.e("---------", "Error adding location data", e)
+        }
+
+      releaseWakeLock()
     }
   }
   private fun calculateSmoothedLatLng(locations: List<LatLng>): LatLng {
@@ -86,9 +126,9 @@ class LocationProvider(private val activity: AppCompatActivity) {
   private fun saveLocationToFile(locationInfo: String) {
     try {
       val fileName = "location_data.txt"
-      val fileOutputStream = activity.openFileOutput(fileName, Context.MODE_APPEND)
+      val fileOutputStream = context.openFileOutput(fileName, Context.MODE_APPEND)
       val outputStreamWriter = OutputStreamWriter(fileOutputStream)
-      outputStreamWriter.write(locationInfo + "\n")
+      outputStreamWriter.write(locationInfo +  "\n")
       outputStreamWriter.close()
       Log.d("LocationSaved", "Location data saved to file.")
     } catch (e: Exception) {
@@ -97,24 +137,94 @@ class LocationProvider(private val activity: AppCompatActivity) {
   }
   fun getUserLocation() {
     client.lastLocation.addOnSuccessListener { location ->
-      val latLng = LatLng(location.latitude, location.longitude)
-      locations.add(latLng)
-      liveLocation.value = latLng
+      if (location != null) {
+        val latLng = LatLng(location.latitude, location.longitude)
+        locations.add(latLng)
+        liveLocation.value = latLng
+      } else {
+        requestSingleLocationUpdate()
+        Log.e("LocationError", "Last location is null")
+      }
     }
   }
+  private fun requestSingleLocationUpdate() {
+    val locationRequest = LocationRequest.create()
+    locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+
+    val callback = object : LocationCallback() {
+      override fun onLocationResult(result: LocationResult) {
+        val location = result.lastLocation
+        if (location != null) {
+          val latLng = LatLng(location.latitude, location.longitude)
+          locations.add(latLng)
+          liveLocation.value = latLng
+
+          // Remove location updates after receiving a single location
+          client.removeLocationUpdates(this)
+        } else {
+          Log.e("LocationError", "Unable to get current location.")
+        }
+      }
+    }
+    // Request location updates
+    client.requestLocationUpdates(locationRequest, callback, Looper.getMainLooper())
+  }
   fun trackUser() {
+
+    acquireWakeLock()
+
     val locationRequest = LocationRequest.create()
     locationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
     locationRequest.interval = 5000
+
+    val serviceIntent = Intent(context, LocationForegroundService::class.java)
+    ContextCompat.startForegroundService(context, serviceIntent)
+
     client.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
   }
 
   fun stopTracking() {
+
+    releaseWakeLock()
     client.removeLocationUpdates(locationCallback)
     locations.clear()
     distance = 0
+
+    val serviceIntent = Intent(context, LocationForegroundService::class.java)
+    context.stopService(serviceIntent)
+
+    releaseWakeLock()
   }
+
+  private fun acquireWakeLock() {
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    wakeLock = powerManager.newWakeLock(
+      PowerManager.PARTIAL_WAKE_LOCK,
+      WAKELOCK_TAG_PREFIX + System.currentTimeMillis()
+    )
+    wakeLock?.acquire()
+  }
+  fun releaseWakeLock() {
+    try {
+      wakeLock?.let {
+        if (it.isHeld) {
+          it.release()
+          Log.d("======", "releaseWakeLock: Wakelock released.")
+        } else {
+          Log.d("======", "releaseWakeLock: Wakelock not held.")
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("======", "releaseWakeLock: Error releasing Wakelock: ${e.message}")
+    }
+  }
+
+
 }
+
+
+
+
 
 //fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
 //  val R = 6371

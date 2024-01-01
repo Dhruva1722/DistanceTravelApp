@@ -1,0 +1,69 @@
+{
+  "project_info": {
+    "project_number": "299713544547",
+    "firebase_url": "https://trackingapp-f572b-default-rtdb.firebaseio.com",
+    "project_id": "trackingapp-f572b",
+    "storage_bucket": "trackingapp-f572b.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:299713544547:android:4973a329c345ea8afe5356",
+        "android_client_info": {
+          "package_name": "com.example.distancetravelapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "299713544547-f7gqaqjpir6oa990rvjfigrpkd1u0j99.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFJbQeXZn2iSZ_xvWe7v0J5GxKE_eRSDM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "299713544547-f7gqaqjpir6oa990rvjfigrpkd1u0j99.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:299713544547:android:f4a0aa3c9c259ae8fe5356",
+        "android_client_info": {
+          "package_name": "com.example.trackingapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "299713544547-f7gqaqjpir6oa990rvjfigrpkd1u0j99.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFJbQeXZn2iSZ_xvWe7v0J5GxKE_eRSDM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "299713544547-f7gqaqjpir6oa990rvjfigrpkd1u0j99.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

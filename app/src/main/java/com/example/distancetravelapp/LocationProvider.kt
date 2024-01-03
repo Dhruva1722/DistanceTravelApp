@@ -13,7 +13,10 @@ import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Marker
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.database.FirebaseDatabase
 import com.google.maps.android.SphericalUtil
 import java.io.OutputStreamWriter
@@ -27,8 +30,11 @@ class LocationProvider(private val context: Context) {
 
   private val client by lazy { LocationServices.getFusedLocationProviderClient(context) }
 
+  private var marker: Marker? = null
+  private var map: GoogleMap? = null
   private val locations = mutableListOf<LatLng>()
 
+  private lateinit var lastLocation: LatLng
   private var distance = 0
 
   private val DISTANCE_THRESHOLD_METERS = 10 // Increase the threshold
@@ -49,15 +55,15 @@ class LocationProvider(private val context: Context) {
   val database = FirebaseDatabase.getInstance()
   val locationsReference = database.getReference("locations")
 
+  fun initializeMap(map: GoogleMap) {
+    this.map = map
+  }
   private val locationCallback = object : LocationCallback() {
     override fun onLocationResult(result: LocationResult) {
       val currentLocation = result.lastLocation
       val latLng = LatLng(currentLocation.latitude, currentLocation.longitude)
 
-      val lastLocation = locations.lastOrNull()
-
-
-      Log.d("--------------", "onLocationResult: LatLon ${latLng}")
+      var lastLocation = locations.lastOrNull()
 
       if (lastLocation != null) {
         val calculatedDistance =
@@ -68,7 +74,10 @@ class LocationProvider(private val context: Context) {
           liveDistance.value = distance
         }
       }
-      val locationInfo ="latitude and longitude : $latLng, Distance : $distance  ----- Time : $currentTimeStamp"
+      lastLocation = latLng
+
+      val locationInfo =
+        "latitude and longitude : $latLng, Distance : $distance  ----- Time : $currentTimeStamp"
       Log.d("--------------", "onLocationResult:  ${locationInfo}")
       saveLocationToFile(locationInfo)
 
@@ -78,9 +87,7 @@ class LocationProvider(private val context: Context) {
       val smoothedLatLng = calculateSmoothedLatLng(smoothedLocations)
 
       locations.add(smoothedLatLng)
-//      locations.add(latLng)
       liveLocations.value = locations
-
 
       val dateFormat = SimpleDateFormat("yyyy-MM-dd  ", Locale.getDefault())
       val date = dateFormat.format(Date())
@@ -103,7 +110,8 @@ class LocationProvider(private val context: Context) {
           Log.e("---------", "Error adding location data", e)
         }
 
-      releaseWakeLock()
+
+      updateMarker(latLng)
     }
   }
   private fun calculateSmoothedLatLng(locations: List<LatLng>): LatLng {
@@ -138,9 +146,9 @@ class LocationProvider(private val context: Context) {
   fun getUserLocation() {
     client.lastLocation.addOnSuccessListener { location ->
       if (location != null) {
-        val latLng = LatLng(location.latitude, location.longitude)
-        locations.add(latLng)
-        liveLocation.value = latLng
+        lastLocation = LatLng(location.latitude, location.longitude)
+        locations.add(lastLocation)
+        liveLocation.value = lastLocation
       } else {
         requestSingleLocationUpdate()
         Log.e("LocationError", "Last location is null")
@@ -184,7 +192,6 @@ class LocationProvider(private val context: Context) {
   }
 
   fun stopTracking() {
-
     releaseWakeLock()
     client.removeLocationUpdates(locationCallback)
     locations.clear()
@@ -193,7 +200,22 @@ class LocationProvider(private val context: Context) {
     val serviceIntent = Intent(context, LocationForegroundService::class.java)
     context.stopService(serviceIntent)
 
-    releaseWakeLock()
+    addMarkerAtLastLocation()
+  }
+
+  private fun updateMarker(latLng: LatLng) {
+    // Remove the existing marker if it exists
+    marker?.remove()
+
+    // Add a marker at the current location
+    marker = map?.addMarker(MarkerOptions().position(latLng).title("Last Known Location"))
+  }
+
+  private fun addMarkerAtLastLocation() {
+    // Add a marker at the last known location when tracking stops
+    lastLocation.let { lastLatLng ->
+      updateMarker(lastLatLng)
+    }
   }
 
   private fun acquireWakeLock() {
@@ -218,7 +240,6 @@ class LocationProvider(private val context: Context) {
       Log.e("======", "releaseWakeLock: Error releasing Wakelock: ${e.message}")
     }
   }
-
 
 }
 

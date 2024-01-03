@@ -11,14 +11,15 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.PolylineOptions
 import com.example.distancetravelapp.databinding.ActivityMapsBinding
+import com.google.android.gms.maps.model.Marker
 
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
   private lateinit var map: GoogleMap
-  private lateinit var binding: ActivityMapsBinding
-//  private lateinit var mapQuestDirectionsTask: MapQuestDirectionsTask
+  private lateinit var locationProvider: LocationProvider
 
+  private lateinit var binding: ActivityMapsBinding
 
   private val presenter = MapPresenter(this)
 
@@ -30,10 +31,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     binding = ActivityMapsBinding.inflate(layoutInflater)
     setContentView(binding.root)
 
-    // Obtain the SupportMapFragment and get notified when the map is ready to be used.
     val mapFragment = supportFragmentManager
       .findFragmentById(R.id.map) as SupportMapFragment
     mapFragment.getMapAsync(this)
+
+    locationProvider = LocationProvider(this)
 
     binding.btnStartStop.setOnClickListener {
       if (binding.btnStartStop.text == getString(R.string.start_label)) {
@@ -51,11 +53,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
   override fun onMapReady(googleMap: GoogleMap) {
     map = googleMap
+    locationProvider.initializeMap(map)
 
     presenter.ui.observe(this) { ui ->
       updateUi(ui)
     }
-
     presenter.onMapLoaded()
     map.uiSettings.isZoomControlsEnabled = true
   }
@@ -68,8 +70,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     map.clear()
 
     presenter.startTracking()
-
-//    getDirectionsFromApi("Naroda, Ahmedabad", "Jasodanagar Char Rasta ,Ahmedabad ")
   }
 
   private fun stopTracking() {
